@@ -43,7 +43,7 @@ impl Context {
     ///
     /// Note that the result of this method is informative rather than precise: as we reply on
     /// `JoinHandle` to ascertain if a task is still running, and `JoinHandle::is_finished()` might
-    /// be delayed in it's repsonse to a task terminating (even if `Joinhandle::abort()` is
+    /// be delayed in it's response to a task terminating (even if `Joinhandle::abort()` is
     /// called), it's possible for the count returned from this method to be imprecise during the
     /// period between one or more tasks terminating and their corresponding `JoinHandle` being
     /// notified.

@@ -14,7 +14,7 @@ use crate::{
 pub enum SendError {
     /// This error arises when the actors message channel has been closed.
     ///
-    /// Typically this is beacuse the actor has terminated in some way before all the `Handle` have
+    /// Typically this is because the actor has terminated in some way before all the `Handle` have
     /// been dropped. This could be due to an irrecoverable error arising in the actor.
     #[error("Actor inbox channel was closed")]
     ChannelClosed,
@@ -58,7 +58,7 @@ impl<A> Handle<A>
 where
     A: Actor + 'static,
 {
-    /// Spwan the actor
+    /// Spawn the actor
     ///
     /// This method will spawn a new task that executes the actor life-cycle. This function returns
     /// a new `Handle` that can be used to send messages to the new actor.
@@ -75,7 +75,7 @@ where
             if let Err(err) = actor.started(task_context, task_handle).await {
                 if !actor.is_recoverable(&err) {
                     tracing::error!(error = ?err, actor_name = task_name,
-                    "Recived irrecoverable error starting actor");
+                    "Received irrecoverable error starting actor");
                     return;
                 }
 
@@ -158,7 +158,7 @@ where
     /// The reply is communicated with the recipient actor by way of a `oneshot` single-value
     /// channel. There are some semantics to be aware of:
     ///
-    /// 1. If the sender drops the recieve end of the oneshot before the message has been
+    /// 1. If the sender drops the receive end of the oneshot before the message has been
     ///    dispatched to the actor, the message will be dropped before it is processed by the
     ///    actor. In which case, a warning will be logged indicating that the actor ignored the
     ///    message. If you intend to drop the receiver of a reply, but still want the message to be
@@ -282,7 +282,7 @@ where
 /// 2. Hold a weak reference to an actor. This can be useful when you need to send a message to an
 ///    actor, but you do not want to keep that actor alive unnecessarily.
 /// 3. Allow an actor to maintain a reference to itself, maybe to be passed out later to other
-///    actors, without creating an unncessary self-reference cycle.
+///    actors, without creating an unnecessary self-reference cycle.
 ///
 /// As an example, in the `Actor::started` method an actor receives a `Handle` to itself. It can
 /// pass this `Handle` in messages to other actors so they can communicate with it. However, once
@@ -403,7 +403,7 @@ where
     /// Create a `WeakRecipient` from this `WeakHandle`.
     ///
     /// For the same reason that we may want to create a `Recipient` from a `Handle`, we can also
-    /// create a `WeakRecipient` from a `WeakHandle`. The `WeakRecipient` will need to be ugpraded
+    /// create a `WeakRecipient` from a `WeakHandle`. The `WeakRecipient` will need to be upgraded
     /// to a `Recipient` before it can be used. Much like a `WeakHandle`, a `WeakRecipient` does not
     /// count as a reference to an actor until it is upgraded to a `Recipient`.
     pub fn recipient<M>(&self) -> WeakRecipient<M>
