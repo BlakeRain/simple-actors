@@ -1,0 +1,52 @@
+name: Check
+
+on:
+  - push
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout the repository
+        uses: actions/checkout@v3
+
+      - name: Setup node
+        uses: actions/setup-node@v3
+        node-version: "20.x"
+
+      - name: Install node packages
+        run: npm install
+
+      - name: Install the stable rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        env:
+          RUSTUP_PERMIT_COPY_RENAME:
+        with:
+          toolchain: stable
+          components: clippy
+          cache: false
+
+      - name: Run tests
+        uses: actions-rs/cargo@v1
+        with:
+          command: test
+
+      - name: Run cargo check
+        uses: actions-rs/cargo@v1
+        with:
+          command: check
+
+      - name: Run cargo clippy
+        uses: actions-rs/cargo@v1
+        with:
+          command: clippy
+
+      - name: Check formatting
+        run: |
+          cargo fmt --all -- --check
+
+      - name: Check typos
+        uses: crate-ci/typos@master
+
+      - name: Run cypress tests (release)
+        run: npm run ci:release
