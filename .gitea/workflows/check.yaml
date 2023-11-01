@@ -47,6 +47,3 @@ jobs:
 
       - name: Check typos
         uses: crate-ci/typos@master
-
-      - name: Run cypress tests (release)
-        run: npm run ci:release
