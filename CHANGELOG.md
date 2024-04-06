@@ -12,7 +12,7 @@
 
 ### 🛠 Fixes
 
-- Updated the `tokio` dependency from `1.33` to `1.37`
+- Changed the `tokio` dependency from `1.33` to `1.0`
 - Updated the `env_logger` dev dependency from `0.10` to `0.11`
 
 ### ⚡️ Features
