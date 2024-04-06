@@ -597,6 +597,7 @@ where
     /// An additional case exists where a `Default` weak recipient was created, or the
     /// `WeakRecipient` was cleared. In such cases the `WeakRecipient` will be empty, and upgrading
     /// will not succeed.
+    #[allow(clippy::question_mark)]
     pub fn upgrade(&self) -> Option<Recipient<M>> {
         let Some(ref upgradable) = self.upgradable else {
             return None;
