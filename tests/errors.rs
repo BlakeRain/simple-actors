@@ -1,8 +1,5 @@
 use async_trait::async_trait;
-use simple_actors::{
-    message::{Handler, Message},
-    Actor, Context, Handle, SendError,
-};
+use simple_actors::{messages, Actor, Context, Handler, SendError};
 use test_log::test;
 
 #[derive(Default)]
@@ -29,8 +26,8 @@ enum Ping {
     Error(Error),
 }
 
-impl Message for Ping {
-    type Reply = usize;
+messages! {
+    Ping => usize
 }
 
 #[async_trait]
@@ -55,18 +52,18 @@ impl Handler<Ping> for ErrorActor {
 async fn test_actor_error_recoverable() -> Result<(), Box<dyn std::error::Error>> {
     // Create the context and spawn our ping actor.
     let ctx = Context::default();
-    let hdl = Handle::<ErrorActor>::spawn_default(Some(ctx.clone())).await;
+    let hdl = ctx.spawn_default::<ErrorActor>().await;
 
     // Send a ping message to the actor as normal
     let res = hdl.send(Ping::Regular).await?;
     assert_eq!(res, 1);
 
-    // Now send a message to the actor that causes the actor to encounter an error. This is not an irrecoverable error,
-    // so the actor should still be alive afterwards.
+    // Now send a message to the actor that causes the actor to encounter an error. This is not an
+    // irrecoverable error, so the actor should still be alive afterwards.
     //
-    // This should result in an error indicating that the reply channel has closed. This will be because the actor has
-    // handled the message, but then encountered an error. The error caused the `EnvelopeHandler::handle` method to
-    // just drop the oneshot reply sender.
+    // This should result in an error indicating that the reply channel has closed. This will be
+    // because the actor has handled the message, but then encountered an error. The error caused
+    // the `EnvelopeHandler::handle` method to just drop the oneshot reply sender.
 
     let res = hdl.send(Ping::Error(Error::Recoverable)).await;
     assert_eq!(res, Err(SendError::ReplyChannelClosed));
@@ -89,19 +86,19 @@ async fn test_actor_error_recoverable() -> Result<(), Box<dyn std::error::Error>
 async fn test_actor_error_irrecoverable() -> Result<(), Box<dyn std::error::Error>> {
     // Create the context and spawn our ping actor.
     let ctx = Context::default();
-    let hdl = Handle::<ErrorActor>::spawn_default(Some(ctx.clone())).await;
+    let hdl = ctx.spawn_default::<ErrorActor>().await;
 
     // Send a ping message to the actor as normal
     let res = hdl.send(Ping::Regular).await?;
     assert_eq!(res, 1);
 
-    // Now send a message that causes the actor to terminate it's event loop. This is done with a ping message that
-    // tells the actor's handler for this message to return an error. The error is irrecoverable, meaning the actor
-    // will end.
+    // Now send a message that causes the actor to terminate it's event loop. This is done with a
+    // ping message that tells the actor's handler for this message to return an error. The error
+    // is irrecoverable, meaning the actor will end.
     //
-    // This should result in an error indicating that the reply channel has closed. This will be because the actor has
-    // handled the message, but then encountered an error. The error caused the `EnvelopeHandler::handle` method to
-    // just drop the oneshot reply sender.
+    // This should result in an error indicating that the reply channel has closed. This will be
+    // because the actor has handled the message, but then encountered an error. The error caused
+    // the `EnvelopeHandler::handle` method to just drop the oneshot reply sender.
 
     let res = hdl.send(Ping::Error(Error::Irrecoverable)).await;
     assert_eq!(res, Err(SendError::ReplyChannelClosed));

@@ -1,6 +1,6 @@
 [package]
 name = "simple-actors"
-version = "0.1.0"
+version = "0.2.0"
 description = "Simple actor system based on Tokio"
 authors = ["Blake Rain <blake.rain@blakerain.com>"]
 edition = "2021"
@@ -10,9 +10,9 @@ async-trait = { version = "0.1" }
 futures = { version = "0.3" }
 thiserror = { version = "1.0" }
 tracing = { version = "0.1" }
-tokio = { version = "1.33", features = ["full"] }
+tokio = { version = "1.37", features = ["full"] }
 
 [dev-dependencies]
-env_logger = { version = "0.10" }
-test-log = { version = "0.2" }
+env_logger = { version = "0.11" }
+test-log = { version = "0.2", features = ["trace"] }
 

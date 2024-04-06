@@ -1,8 +1,5 @@
 use async_trait::async_trait;
-use simple_actors::{
-    message::{Handler, Message},
-    Actor, Context, Handle,
-};
+use simple_actors::{Actor, Context, Handler, Message};
 use test_log::test;
 
 #[derive(Default)]
@@ -31,7 +28,7 @@ impl Handler<Ping> for PingActor {
 #[test(tokio::test)]
 async fn test_actor_ping() -> Result<(), Box<dyn std::error::Error>> {
     let ctx = Context::default();
-    let hdl = Handle::<PingActor>::spawn_default(Some(ctx.clone())).await;
+    let hdl = ctx.spawn_default::<PingActor>().await;
 
     let res = hdl.send(Ping).await?;
     assert_eq!(res, 1);

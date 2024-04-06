@@ -1,8 +1,5 @@
 use async_trait::async_trait;
-use simple_actors::{
-    message::{Handler, Message},
-    Actor, Context, Handle, Recipient, SendError,
-};
+use simple_actors::{Actor, Context, Handler, Message, Recipient, SendError};
 use test_log::test;
 
 struct OrderShipped(usize);
@@ -90,18 +87,10 @@ impl Handler<OrderShipped> for SmsSubscriber {
 #[test(tokio::test)]
 async fn test_actor_recipient() -> Result<(), Box<dyn std::error::Error>> {
     let ctx = Context::default();
-    let sub1 = Subscribe(
-        Handle::<EmailSubscriber>::spawn_default(Some(ctx.clone()))
-            .await
-            .recipient(),
-    );
-    let sub2 = Subscribe(
-        Handle::<SmsSubscriber>::spawn_default(Some(ctx.clone()))
-            .await
-            .recipient(),
-    );
+    let sub1 = Subscribe(ctx.spawn_default::<EmailSubscriber>().await.recipient());
+    let sub2 = Subscribe(ctx.spawn_default::<SmsSubscriber>().await.recipient());
 
-    let order_events = Handle::<OrderEvents>::spawn_default(Some(ctx.clone())).await;
+    let order_events = ctx.spawn_default::<OrderEvents>().await;
     order_events.post(sub1).await?;
     order_events.post(sub2).await?;
 

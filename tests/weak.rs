@@ -1,8 +1,5 @@
 use async_trait::async_trait;
-use simple_actors::{
-    message::{Handler, Message},
-    Actor, Context, Handle,
-};
+use simple_actors::{Actor, Context, Handler, Message};
 use test_log::test;
 
 #[derive(Default)]
@@ -29,7 +26,7 @@ impl Handler<MyMessage> for MyActor {
 async fn test_actor_weak_handle() -> Result<(), Box<dyn std::error::Error>> {
     // Create a context and spawn a new actor
     let ctx = Context::default();
-    let hdl = Handle::<MyActor>::spawn_default(Some(ctx.clone())).await;
+    let hdl = ctx.spawn_default::<MyActor>().await;
 
     // Make sure that we have the actor in our context
     assert_eq!(ctx.remaining_actors().await, 1);
@@ -62,7 +59,7 @@ async fn test_actor_weak_handle() -> Result<(), Box<dyn std::error::Error>> {
 async fn test_actor_weak_handle_upgrade() -> Result<(), Box<dyn std::error::Error>> {
     // Create a context and spawn a new actor
     let ctx = Context::default();
-    let hdl = Handle::<MyActor>::spawn_default(Some(ctx.clone())).await;
+    let hdl = ctx.spawn_default::<MyActor>().await;
 
     // Make sure that we have the actor in our context
     assert_eq!(ctx.remaining_actors().await, 1);
@@ -87,7 +84,8 @@ async fn test_actor_weak_handle_upgrade() -> Result<(), Box<dyn std::error::Erro
     // We should still have the actor in our context, as 'upgraded' is still live.
     assert_eq!(ctx.remaining_actors().await, 1);
 
-    // Now drop the 'upgraded' handle, and yield execution to the runtime to allow the actor to be dropped
+    // Now drop the 'upgraded' handle, and yield execution to the runtime to allow the actor to be
+    // dropped
     drop(upgraded);
     tokio::task::yield_now().await;
 
@@ -104,7 +102,7 @@ async fn test_actor_weak_handle_upgrade() -> Result<(), Box<dyn std::error::Erro
 async fn test_actor_weak_recipient() -> Result<(), Box<dyn std::error::Error>> {
     // Create a context and spawn a new actor
     let ctx = Context::default();
-    let hdl = Handle::<MyActor>::spawn_default(Some(ctx.clone())).await;
+    let hdl = ctx.spawn_default::<MyActor>().await;
 
     // Make sure that we have the actor in our context
     assert_eq!(ctx.remaining_actors().await, 1);
@@ -147,7 +145,7 @@ async fn test_actor_weak_recipient() -> Result<(), Box<dyn std::error::Error>> {
 async fn test_actor_weak_recipient_upgrade() -> Result<(), Box<dyn std::error::Error>> {
     // Create a context and spawn a new actor
     let ctx = Context::default();
-    let hdl = Handle::<MyActor>::spawn_default(Some(ctx.clone())).await;
+    let hdl = ctx.spawn_default::<MyActor>().await;
 
     // Make sure that we have the actor in our context
     assert_eq!(ctx.remaining_actors().await, 1);
@@ -182,7 +180,8 @@ async fn test_actor_weak_recipient_upgrade() -> Result<(), Box<dyn std::error::E
     // We should still have the actor in our context, as 'upgraded' is still live.
     assert_eq!(ctx.remaining_actors().await, 1);
 
-    // Now drop the 'upgraded' recipient, and yield execution to the runtime to allow the actor to be dropped
+    // Now drop the 'upgraded' recipient, and yield execution to the runtime to allow the actor to
+    // be dropped
     drop(upgraded);
     tokio::task::yield_now().await;
 

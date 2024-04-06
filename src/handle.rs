@@ -2,7 +2,10 @@ use async_trait::async_trait;
 use std::fmt::Debug;
 
 use thiserror::Error;
-use tokio::sync::{mpsc, oneshot};
+use tokio::{
+    sync::{mpsc, oneshot},
+    task::JoinSet,
+};
 
 use crate::{
     context::Context,
@@ -33,6 +36,12 @@ pub enum SendError {
 ///
 /// Once all handles for an actor have been dropped, the actor will terminate its message loop and
 /// shut down.
+///
+/// To keep a handle around without contributing to the actors lifetime, you can downgrade a
+/// `Handle` to a [`WeakHandle`].
+///
+/// The `Handle` type is parameterized by the actor. If you want to keep a handle to any actor that
+/// can receive a particular [`Message`], you can convert the `Handle` to a [`Recipient`].
 pub struct Handle<A: Actor> {
     sender: mpsc::Sender<Envelope<A>>,
 }
@@ -58,29 +67,23 @@ impl<A> Handle<A>
 where
     A: Actor + 'static,
 {
-    /// Spawn the actor
-    ///
-    /// This method will spawn a new task that executes the actor life-cycle. This function returns
-    /// a new `Handle` that can be used to send messages to the new actor.
-    pub async fn spawn(context: Option<Context>, mut actor: A) -> Self {
+    pub(crate) fn run(context: Context, join_set: &mut JoinSet<()>, mut actor: A) -> Self {
         let (sender, mut receiver) = mpsc::channel::<Envelope<A>>(actor.mailbox_size());
         let handle = Self { sender };
         let name = actor.name();
 
-        let task_name = name.clone();
-        let task_context = context.clone();
         let task_handle = handle.clone();
-        let task = tokio::spawn(async move {
-            tracing::info!(actor_name = task_name, "Starting actor");
-            if let Err(err) = actor.started(task_context, task_handle).await {
+        join_set.spawn(async move {
+            tracing::info!(actor_name = name, "Starting actor");
+            if let Err(err) = actor.started(context.clone(), task_handle).await {
                 if !actor.is_recoverable(&err) {
-                    tracing::error!(error = ?err, actor_name = task_name,
-                    "Received irrecoverable error starting actor");
+                    tracing::error!(error = ?err, actor_name = name,
+                        "Received irrecoverable error starting actor");
                     return;
                 }
 
-                tracing::warn!(error = ?err, actor_name = task_name,
-                "Received recoverable error starting actor");
+                tracing::warn!(error = ?err, actor_name = name,
+                    "Received recoverable error starting actor");
             }
 
             let mut termination = "no more handles";
@@ -94,7 +97,7 @@ where
                     Err(EnvelopeHandlerError::ActorError(error)) => {
                         if !actor.is_recoverable(&error) {
                             termination = "irrecoverable error";
-                            tracing::error!(error = ?error, actor_name = task_name,
+                            tracing::error!(error = ?error, actor_name = name,
                                             message_type = message.type_name(),
                                             "Received irrecoverable error in message handler");
                             break;
@@ -107,7 +110,7 @@ where
 
                     Err(EnvelopeHandlerError::Ignored) => {
                         tracing::warn!(
-                            actor_name = task_name,
+                            actor_name = name,
                             message_type = message.type_name(),
                             "Actor ignored message"
                         );
@@ -115,7 +118,7 @@ where
 
                     Err(EnvelopeHandlerError::SenderError) => {
                         tracing::warn!(
-                            actor_name = task_name,
+                            actor_name = name,
                             message_type = message.type_name(),
                             "Actor failed to send reply to message; other end probably dropped"
                         );
@@ -123,20 +126,13 @@ where
                 }
             }
 
-            tracing::info!(
-                actor_name = task_name,
-                "Actor has terminated ({termination})"
-            );
+            tracing::info!(actor_name = name, "Actor has terminated ({termination})");
 
             if let Err(err) = actor.stopped().await {
-                tracing::warn!(actor_name = task_name, error = ?err,
+                tracing::warn!(actor_name = name, error = ?err,
                                "Received error during termination of actor");
             }
         });
-
-        if let Some(context) = context {
-            context.register_actor(name, task).await;
-        }
 
         handle
     }
@@ -217,24 +213,20 @@ where
             .map_err(|_| SendError::ChannelClosed)
     }
 
-    /// Return a 'Recipient' for a given message type.
+    /// Return a `Recipient` for a given message type.
     ///
     /// So long as the actor type `A` is able to process message `M` (i.e. there exists some
     /// `Handle<M>` implementation for `A`), then a `Recipient<M>` can be created.
     ///
     /// This is very useful when you have multiple actor types that can process a given message, and
-    /// you need to register any of those actors in some way to receive that message. Detaching the
-    /// ability to receive a message from the actor's type allows you to register the actor in a
-    /// generic way.
+    /// you need to register any of those actors in some way to receive that message.
     pub fn recipient<M>(&self) -> Recipient<M>
     where
         M: Message + 'static,
         A: Handler<M>,
     {
-        let clone = (*self).clone();
         Recipient {
-            name: std::any::type_name::<A>(),
-            sender: Box::new(clone),
+            sender: self.boxed(),
         }
     }
 
@@ -257,16 +249,6 @@ where
     /// will have terminated before all `Handle` have been dropped.
     pub fn is_closed(&self) -> bool {
         self.sender.is_closed()
-    }
-}
-
-impl<A> Handle<A>
-where
-    A: Actor + Default + 'static,
-{
-    /// Spawn a default actor.
-    pub async fn spawn_default(context: Option<Context>) -> Self {
-        Self::spawn(context, A::default()).await
     }
 }
 
@@ -326,7 +308,7 @@ where
 /// impl Actor for MyActor {
 ///   type Error = MyActorError;
 ///
-///   async fn started(&mut self, _: Option<Context>, handle: Handle<Self>) -> Result<(), Self::Error> {
+///   async fn started(&mut self, _: Context, handle: Handle<Self>) -> Result<(), Self::Error> {
 ///     self.self_handle = handle.downgrade();
 ///     Ok(())
 ///   }
@@ -411,10 +393,8 @@ where
         M: Message + 'static,
         A: Handler<M>,
     {
-        let clone = (*self).clone();
         WeakRecipient {
-            name: std::any::type_name::<A>(),
-            upgradable: Box::new(clone),
+            upgradable: Some(self.boxed()),
         }
     }
 }
@@ -472,18 +452,12 @@ where
     M: Message + Send,
     M::Reply: Send,
 {
-    name: &'static str,
     sender: Box<dyn Sender<M> + Sync>,
 }
 
 impl<M: Message> Debug for Recipient<M> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "Recipient<{} -> {}>",
-            std::any::type_name::<M>(),
-            self.name
-        )
+        write!(f, "Recipient<{}>", std::any::type_name::<M>(),)
     }
 }
 
@@ -494,7 +468,6 @@ where
 {
     fn clone(&self) -> Self {
         Self {
-            name: self.name,
             sender: self.sender.boxed(),
         }
     }
@@ -505,10 +478,6 @@ where
     M: Message + Send,
     M::Reply: Send,
 {
-    pub fn get_actor_type_name(&self) -> &str {
-        self.name
-    }
-
     /// Send a message to the recipient actor and wait for a reply.
     ///
     /// This method is used to send a message of this type to the actor attached to this
@@ -538,8 +507,7 @@ where
     /// Downgrade this reciepient into a `WeakRecipient`.
     pub fn downgrade(&self) -> WeakRecipient<M> {
         WeakRecipient {
-            name: self.name,
-            upgradable: self.sender.downgrade_recipient(),
+            upgradable: Some(self.sender.downgrade_recipient()),
         }
     }
 }
@@ -549,6 +517,7 @@ where
     M: Message + Send,
     M::Reply: Send,
 {
+    fn boxed(&self) -> Box<dyn UpgradableRecipient<M> + Sync>;
     fn upgrade_recipient(&self) -> Option<Recipient<M>>;
 }
 
@@ -558,19 +527,55 @@ where
     M: Message + 'static,
     A: Handler<M>,
 {
+    fn boxed(&self) -> Box<dyn UpgradableRecipient<M> + Sync> {
+        Box::new(self.clone())
+    }
+
     fn upgrade_recipient(&self) -> Option<Recipient<M>> {
         let handle = self.upgrade()?;
         Some(handle.recipient())
     }
 }
 
+/// A weak recipient of a message.
+///
+/// This weaker form of `Recipient` will not cause the actor to stay alive: once all the normal
+/// `Handle` and `Recipient` have been dropped, regardless of any remaining `WeakRecipient`, the
+/// actor will terminate.
+///
+/// You can upgrade a `WeakRecipient` back into a [`Recipient`] so long as the actor remains alive.
 pub struct WeakRecipient<M>
 where
     M: Message + Send,
     M::Reply: Send,
 {
-    name: &'static str,
-    upgradable: Box<dyn UpgradableRecipient<M> + Sync>,
+    upgradable: Option<Box<dyn UpgradableRecipient<M> + Sync>>,
+}
+
+impl<M> Default for WeakRecipient<M>
+where
+    M: Message + Send,
+    M::Reply: Send,
+{
+    fn default() -> Self {
+        Self { upgradable: None }
+    }
+}
+
+impl<M> Clone for WeakRecipient<M>
+where
+    M: Message + Send,
+    M::Reply: Send,
+{
+    fn clone(&self) -> Self {
+        Self {
+            upgradable: if let Some(upgradable) = &self.upgradable {
+                Some(upgradable.boxed())
+            } else {
+                None
+            },
+        }
+    }
 }
 
 impl<M> WeakRecipient<M>
@@ -578,13 +583,25 @@ where
     M: Message + Send,
     M::Reply: Send,
 {
-    /// Get the type name for the actor receiving this message.
-    pub fn get_actor_type_name(&self) -> &'static str {
-        self.name
+    /// Clear a `WeakRecipient` so it no longer can be upgraded.
+    pub fn clear(&mut self) {
+        self.upgradable = None;
     }
 
     /// Upgrade a weak recipient to a normal `Recipient`.
+    ///
+    /// This will attempt to convert the `WeakRecipient` into a normal `Recipient` that can be used
+    /// to send messages to the actor. This will return `Some` if the actor was not terminated;
+    /// otherwise this method will return `None`.
+    ///
+    /// An additional case exists where a `Default` weak recipient was created, or the
+    /// `WeakRecipient` was cleared. In such cases the `WeakRecipient` will be empty, and upgrading
+    /// will not succeed.
     pub fn upgrade(&self) -> Option<Recipient<M>> {
-        self.upgradable.upgrade_recipient()
+        let Some(ref upgradable) = self.upgradable else {
+            return None;
+        };
+
+        upgradable.upgrade_recipient()
     }
 }

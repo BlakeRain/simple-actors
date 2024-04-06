@@ -1,37 +1,64 @@
 use std::sync::Arc;
 
-use tokio::{sync::Mutex, task::JoinHandle};
+use tokio::{sync::Mutex, task::JoinSet};
+
+use crate::{Actor, Handle};
 
 #[derive(Debug, Default)]
 struct ContextInner {
-    actors: Vec<(String, JoinHandle<()>)>,
+    join_set: JoinSet<()>,
 }
 
 impl ContextInner {
     fn filter_finished_tasks(&mut self) {
-        self.actors.retain(|(_, task)| !task.is_finished());
+        while let Some(result) = self.join_set.try_join_next() {
+            if let Err(err) = result {
+                tracing::error!(error = ?err, "Encountered error joining actor");
+            }
+        }
+    }
+
+    fn take_join_set(&mut self) -> JoinSet<()> {
+        self.filter_finished_tasks();
+        std::mem::take(&mut self.join_set)
     }
 }
 
 /// A context for retaining actors.
 ///
-/// This structure can be passed to the `Handle::spawn()` and `Handle::spawn_default()` functions
-/// to register the task for the actor message loop into the context. This is useful for keeping
-/// track of a number of actors without actually retaining any references to them: once all the
-/// `Handle` for each actor have been dropped, regardless of the actor's presence in a `Context`,
-/// the actor task will terminate.
+/// This structure is used to track the tasks associated with a set of actors. When you wish to
+/// spawn a new actor, you call the `Context::spawn` method, which will return the `Handle` you can
+/// use to communicate with the actor.
 ///
-/// The `Context` provides some useful functions such as checking how many remaining actors are in
-/// the `Context` and waiting for all the actors to finish.
+/// The context simplifies tracking multiple actors, especially when actors end up spawning other
+/// actors. The traditional `Vec` of `JoinHandle` is not entirely useful when this happens. The
+/// `Context` provides some useful functions such as checking how many remaining actors are in the
+/// `Context` and waiting for all the actors to finish.
+///
+/// Access to the `Context` is brokered by a tokio `Mutex`, so the `Context` can be freely cloned
+/// and passed around with abandon. Actors themselves will receive a clone of the `Context` into
+/// which they are spawned via their `Actor::started` trait method. Actors can retain the `Context`
+/// and use it for spawning additional actors.
 #[derive(Debug, Default, Clone)]
 pub struct Context {
     inner: Arc<Mutex<ContextInner>>,
 }
 
 impl Context {
-    pub(crate) async fn register_actor(&self, name: String, task: JoinHandle<()>) {
+    /// Spawn a new actor in this context.
+    ///
+    /// This will spawn a new task that executes the actor mailbox. The function returns a new
+    /// `Handle` that can be used to send messages to the new actor.
+    pub async fn spawn<A: Actor + 'static>(&self, actor: A) -> Handle<A> {
         let mut inner = self.inner.lock().await;
-        inner.actors.push((name, task))
+        Handle::run(self.clone(), &mut inner.join_set, actor)
+    }
+
+    /// Spawn a default actor.
+    ///
+    /// This is the same as the `spawn` method except it uses the `Default` value for the actor.
+    pub async fn spawn_default<A: Actor + Default + 'static>(&self) -> Handle<A> {
+        self.spawn(A::default()).await
     }
 
     /// Count the number of remaining actors.
@@ -50,7 +77,7 @@ impl Context {
     pub async fn remaining_actors(&self) -> usize {
         let mut inner = self.inner.lock().await;
         inner.filter_finished_tasks();
-        inner.actors.len()
+        inner.join_set.len()
     }
 
     /// Check if there are any remaining actors.
@@ -58,80 +85,67 @@ impl Context {
     /// Note that this method operates identically to `Context::remaining_actors()`, and is
     /// therefore susceptible to the same caveats.
     pub async fn is_empty(&self) -> bool {
-        self.remaining_actors().await == 0
+        self.remaining_actors().await > 0
+    }
+
+    pub(crate) async fn take_join_set(&self) -> JoinSet<()> {
+        self.inner.lock().await.take_join_set()
     }
 
     /// Wait for all actors to complete.
     ///
-    /// This method consumes the `Context` (takes ownership) and will not return until all tasks
-    /// have completed. This can end up taking an indefinite amount of time whilst there is still a
-    /// `Handle` retained for one or more actors registered with this context, or some adverse
-    /// runtime nonsense has occurred.
+    /// This method takes the current set of pending actors out of the `Context` and waits for them
+    /// all to finish. This can end up taking an indefinite amount of time whilst there is still a
+    /// `Handle` retained for one or more actors that were in this context, so some adverse runtime
+    /// nonsense has occurred.
+    ///
+    /// The `Context` can be freely used to spawn new actors either after this method has returned
+    /// or during this methods execution: new actors will be added to the `Context` as normal, this
+    /// method takes the current set of actors from the `Context` at time of invocation.
     #[tracing::instrument(skip_all)]
-    pub async fn wait_all(self) {
-        let tasks = {
-            let mut inner = self.inner.lock().await;
-            inner.filter_finished_tasks();
-            std::mem::take(&mut inner.actors)
-        };
-
-        if tasks.is_empty() {
+    pub async fn wait_all(&self) {
+        let mut join_set = self.take_join_set().await;
+        if join_set.is_empty() {
             tracing::info!("No actors remaining in context");
             return;
         }
 
-        tracing::info!("Politely waiting for {} actor(s) to terminate", tasks.len());
-        let tasks = tasks.into_iter().map(|(name, task)| {
-            tracing::info!("Remaining actor: {name}");
-            task
-        });
+        tracing::info!(
+            "Politely waiting for {} actor(s) to terminate",
+            join_set.len()
+        );
 
-        futures::future::join_all(tasks).await;
+        while let Some(result) = join_set.join_next().await {
+            if let Err(err) = result {
+                tracing::error!(error = ?err, "Encountered error waiting for actor");
+            }
+        }
     }
 
     /// Terminate all actors in the context.
     ///
-    /// This method will go through all the remaining tasks in the `Context` and abort them using
-    /// the corresponding `JoinHandle::abort()` method. It will then wait for each task to
-    /// terminate and report if there was any deviation from the expected `JoinError`.
-    ///
-    /// Specifically, if the task termination caused a panic, this will be logged as an error.
+    /// This method will take the current set of running actors out of the `Context`, abort all
+    /// their tasks, and then wait for them to finish.
     ///
     /// Note that this method should not be used unless all the tasks must be terminated
     /// forcefully. The ideal way to terminate a set of actors is to drop all their handles. You
     /// might be tempted to use this emthod if there are cycles in your actor graph. This is not
-    /// the correct way to shutdown; you should use `WeakHandle` instead and break reference
+    /// the correct way to shutdown: you should use `WeakHandle` instead and break reference
     /// cycles.
     #[tracing::instrument(skip_all)]
-    pub async fn terminate_all(self) {
-        let tasks = {
-            let mut inner = self.inner.lock().await;
-            inner.filter_finished_tasks();
-            std::mem::take(&mut inner.actors)
-        };
-
-        if tasks.is_empty() {
+    pub async fn terminate_all(&self) {
+        let mut join_set = self.take_join_set().await;
+        if join_set.is_empty() {
             tracing::info!("No actors remaining in context");
             return;
         }
 
-        tracing::info!("Rudely terminating {} actor(s)", tasks.len());
-        for (name, task) in &tasks {
-            tracing::info!("Terminating actor: {name}");
-            task.abort();
-        }
+        tracing::info!("Rudely terminating {} actor(s)", join_set.len());
+        join_set.abort_all();
 
-        for (name, task) in tasks {
-            match task.await {
-                Ok(_) => tracing::info!("Actor {name} terminated successfully"),
-                Err(err) => {
-                    if err.is_panic() {
-                        tracing::error!(
-                            "Actor {name} panicked during termination: {:?}",
-                            err.into_panic()
-                        );
-                    }
-                }
+        while let Some(result) = join_set.join_next().await {
+            if let Err(err) = result {
+                tracing::error!(error = ?err, "Encountered error waiting for actor");
             }
         }
     }
