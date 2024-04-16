@@ -2,7 +2,7 @@
 
 ## simple-actors **0.3.0** _(2024-04-16)_
 
-### 🚨 Breaking Changes
+### 🚨 Breaking Changes
 
 - Added a Rust version constraint of
   [1.75](https://blog.rust-lang.org/2023/12/28/Rust-1.75.0.html).
