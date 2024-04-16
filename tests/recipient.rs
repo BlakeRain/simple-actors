@@ -1,4 +1,3 @@
-use async_trait::async_trait;
 use simple_actors::{Actor, Context, Handler, Message, Recipient, SendError};
 use test_log::test;
 
@@ -40,7 +39,6 @@ impl OrderEvents {
     }
 }
 
-#[async_trait]
 impl Handler<Subscribe> for OrderEvents {
     async fn handle(&mut self, message: Subscribe) -> Result<(), Self::Error> {
         self.subscribers.push(message.0);
@@ -48,7 +46,6 @@ impl Handler<Subscribe> for OrderEvents {
     }
 }
 
-#[async_trait]
 impl Handler<Ship> for OrderEvents {
     async fn handle(&mut self, message: Ship) -> Result<(), Self::Error> {
         let _ = self.notify(message.0).await;
@@ -62,7 +59,6 @@ impl Actor for EmailSubscriber {
     type Error = String;
 }
 
-#[async_trait]
 impl Handler<OrderShipped> for EmailSubscriber {
     async fn handle(&mut self, message: OrderShipped) -> Result<(), Self::Error> {
         tracing::info!("Email sent for order {}", message.0);
@@ -76,7 +72,6 @@ impl Actor for SmsSubscriber {
     type Error = String;
 }
 
-#[async_trait]
 impl Handler<OrderShipped> for SmsSubscriber {
     async fn handle(&mut self, message: OrderShipped) -> Result<(), Self::Error> {
         tracing::info!("SMS sent for order {}", message.0);

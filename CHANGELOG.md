@@ -1,6 +1,14 @@
 # Changelog
 
-## simple-actors **0.0.2** *(2024-04-08)*
+## simple-actors **0.3.0** _(2024-04-16)_
+
+### 🚨 Breaking Changes
+
+- Added a Rust version constraint of
+  [1.75](https://blog.rust-lang.org/2023/12/28/Rust-1.75.0.html).
+- Removed the use of [async_trait](https://docs.rs/async-trait/latest/async_trait/) crate.
+
+## simple-actors **0.2.0** _(2024-04-08)_
 
 ### 🚨 Breaking Changes
 

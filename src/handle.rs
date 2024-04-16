@@ -1,6 +1,6 @@
-use async_trait::async_trait;
-use std::fmt::Debug;
+use std::{fmt::Debug, pin::Pin};
 
+use futures::Future;
 use thiserror::Error;
 use tokio::{
     sync::{mpsc, oneshot},
@@ -304,7 +304,6 @@ where
 ///   FailedToUpgradeSelfHandle,
 /// }
 ///
-/// #[async_trait::async_trait]
 /// impl Actor for MyActor {
 ///   type Error = MyActorError;
 ///
@@ -320,7 +319,6 @@ where
 ///   type Reply = Handle<MyActor>;
 /// }
 ///
-/// #[async_trait::async_trait]
 /// impl Handler<SendMeYou> for MyActor {
 ///   async fn handle(&mut self, message: SendMeYou) -> Result<Handle<Self>, Self::Error> {
 ///     self.self_handle.upgrade().ok_or(MyActorError::FailedToUpgradeSelfHandle)
@@ -400,33 +398,45 @@ where
 }
 
 // A utility trait used internally to allow us to form a 'Recipient'.
-#[async_trait]
 trait Sender<M>: Send
 where
     M: Message + Send,
     M::Reply: Send,
 {
-    async fn send(&self, message: M) -> Result<M::Reply, SendError>;
-    async fn post(&self, message: M) -> Result<(), SendError>;
+    fn send<'a>(
+        &'a self,
+        message: M,
+    ) -> Pin<Box<dyn Future<Output = Result<M::Reply, SendError>> + Send + 'a>>;
+
+    fn post<'a>(
+        &'a self,
+        message: M,
+    ) -> Pin<Box<dyn Future<Output = Result<(), SendError>> + Send + 'a>>;
+
     fn blocking_post(&self, message: M) -> Result<(), SendError>;
     fn boxed(&self) -> Box<dyn Sender<M> + Sync>;
     fn downgrade_recipient(&self) -> Box<dyn UpgradableRecipient<M> + Sync>;
 }
 
 // We make 'Handle' implement the 'Sender' trait so it can be boxed into a 'Recipient'.
-#[async_trait]
 impl<A, M> Sender<M> for Handle<A>
 where
     A: Actor,
     M: Message + 'static,
     A: Handler<M>,
 {
-    async fn send(&self, message: M) -> Result<M::Reply, SendError> {
-        self.send(message).await
+    fn send<'a>(
+        &'a self,
+        message: M,
+    ) -> Pin<Box<dyn Future<Output = Result<M::Reply, SendError>> + Send + 'a>> {
+        Box::pin(async { self.send(message).await })
     }
 
-    async fn post(&self, message: M) -> Result<(), SendError> {
-        self.post(message).await
+    fn post<'a>(
+        &'a self,
+        message: M,
+    ) -> Pin<Box<dyn Future<Output = Result<(), SendError>> + Send + 'a>> {
+        Box::pin(async { self.post(message).await })
     }
 
     fn blocking_post(&self, message: M) -> Result<(), SendError> {

@@ -1,12 +1,12 @@
 [package]
 name = "simple-actors"
-version = "0.2.0"
+version = "0.3.0"
 description = "Simple actor system based on Tokio"
 authors = ["Blake Rain <blake.rain@blakerain.com>"]
 edition = "2021"
+rust-version = "1.75"
 
 [dependencies]
-async-trait = { version = "0.1" }
 futures = { version = "0.3" }
 thiserror = { version = "1.0" }
 tracing = { version = "0.1" }

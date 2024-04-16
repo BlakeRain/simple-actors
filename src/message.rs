@@ -1,4 +1,4 @@
-use async_trait::async_trait;
+use std::{future::Future, marker::Send};
 
 use super::actor::Actor;
 
@@ -11,13 +11,12 @@ pub trait Message: Send {
 ///
 /// When an actor wants to indicate that it can handle a particular message it implements this
 /// trait, providing the functionality to handle the message.
-#[async_trait]
 pub trait Handler<M>
 where
     M: Message,
     Self: Actor,
 {
-    async fn handle(&mut self, message: M) -> Result<M::Reply, Self::Error>;
+    fn handle(&mut self, message: M) -> impl Future<Output = Result<M::Reply, Self::Error>> + Send;
 }
 
 /// Define a load of `Message` traits.

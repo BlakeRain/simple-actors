@@ -1,11 +1,8 @@
-use async_trait::async_trait;
-
 use crate::{context::Context, Handle};
 
 /// Trait for all actors.
 ///
 /// Any type that needs to be an actor should implement this trait.
-#[async_trait]
 pub trait Actor: Send + Sized + 'static {
     /// The error type for the actor.
     ///
@@ -52,8 +49,12 @@ pub trait Actor: Send + Sized + 'static {
     /// is recoverable or not. If not, the actor will not be started: the message loop will not be
     /// entered into, and the `stopped()` method will be called.
     #[allow(unused_variables)]
-    async fn started(&mut self, context: Context, handle: Handle<Self>) -> Result<(), Self::Error> {
-        Ok(())
+    fn started(
+        &mut self,
+        context: Context,
+        handle: Handle<Self>,
+    ) -> impl std::future::Future<Output = Result<(), Self::Error>> + std::marker::Send {
+        async { Ok(()) }
     }
 
     /// Called when the actor has stopped.
@@ -67,8 +68,10 @@ pub trait Actor: Send + Sized + 'static {
     /// Note that this method receives ownership of the actor, which usually simplifies actor
     /// clean-up: it is within this method that that the actor is dropped, and you know that your
     /// actor object is never going to be reused.
-    async fn stopped(self) -> Result<(), Self::Error> {
-        Ok(())
+    fn stopped(
+        self,
+    ) -> impl std::future::Future<Output = Result<(), Self::Error>> + std::marker::Send {
+        async { Ok(()) }
     }
 
     /// Check if an error is recoverable (default is no).

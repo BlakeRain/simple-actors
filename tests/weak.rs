@@ -1,4 +1,3 @@
-use async_trait::async_trait;
 use simple_actors::{Actor, Context, Handler, Message};
 use test_log::test;
 
@@ -15,7 +14,6 @@ impl Message for MyMessage {
     type Reply = ();
 }
 
-#[async_trait]
 impl Handler<MyMessage> for MyActor {
     async fn handle(&mut self, _message: MyMessage) -> Result<(), Self::Error> {
         Ok(())

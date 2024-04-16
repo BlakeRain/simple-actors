@@ -1,4 +1,6 @@
-use async_trait::async_trait;
+use std::pin::Pin;
+
+use futures::Future;
 use thiserror::Error;
 use tokio::sync::oneshot;
 
@@ -25,9 +27,11 @@ where
     ActorError(A::Error),
 }
 
-#[async_trait]
 pub trait EnvelopeHandler<A: Actor> {
-    async fn handle(&mut self, actor: &mut A) -> Result<(), EnvelopeHandlerError<A>>;
+    fn handle<'a>(
+        &'a mut self,
+        actor: &'a mut A,
+    ) -> Pin<Box<dyn Future<Output = Result<(), EnvelopeHandlerError<A>>> + Send + 'a>>;
 }
 
 pub struct Envelope<A: Actor + ?Sized> {
@@ -52,10 +56,12 @@ impl<A: Actor> Envelope<A> {
     }
 }
 
-#[async_trait]
 impl<A: Actor> EnvelopeHandler<A> for Envelope<A> {
-    async fn handle(&mut self, actor: &mut A) -> Result<(), EnvelopeHandlerError<A>> {
-        self.handler.handle(actor).await
+    fn handle<'a>(
+        &'a mut self,
+        actor: &'a mut A,
+    ) -> Pin<Box<dyn Future<Output = Result<(), EnvelopeHandlerError<A>>> + Send + 'a>> {
+        Box::pin(async { self.handler.handle(actor).await })
     }
 }
 
@@ -79,30 +85,34 @@ where
     }
 }
 
-#[async_trait]
 impl<A, M> EnvelopeHandler<A> for EnvelopeHandlerProxy<M>
 where
     M: Message + 'static,
     A: Actor + Handler<M>,
 {
-    async fn handle(&mut self, actor: &mut A) -> Result<(), EnvelopeHandlerError<A>> {
-        let sender = self.sender.take();
-        if sender.is_some() && sender.as_ref().unwrap().is_closed() {
-            return Err(EnvelopeHandlerError::Ignored);
-        }
-
-        if let Some(message) = self.message.take() {
-            let reply = <A as Handler<M>>::handle(actor, message)
-                .await
-                .map_err(|err| EnvelopeHandlerError::ActorError(err))?;
-
-            if let Some(sender) = sender {
-                sender
-                    .send(reply)
-                    .map_err(|_| EnvelopeHandlerError::SenderError)?;
+    fn handle<'a>(
+        &'a mut self,
+        actor: &'a mut A,
+    ) -> Pin<Box<dyn Future<Output = Result<(), EnvelopeHandlerError<A>>> + Send + 'a>> {
+        Box::pin(async move {
+            let sender = self.sender.take();
+            if sender.is_some() && sender.as_ref().unwrap().is_closed() {
+                return Err(EnvelopeHandlerError::Ignored);
             }
-        }
 
-        Ok(())
+            if let Some(message) = self.message.take() {
+                let reply = <A as Handler<M>>::handle(actor, message)
+                    .await
+                    .map_err(|err| EnvelopeHandlerError::ActorError(err))?;
+
+                if let Some(sender) = sender {
+                    sender
+                        .send(reply)
+                        .map_err(|_| EnvelopeHandlerError::SenderError)?;
+                }
+            }
+
+            Ok(())
+        })
     }
 }

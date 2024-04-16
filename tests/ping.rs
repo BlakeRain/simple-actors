@@ -1,4 +1,3 @@
-use async_trait::async_trait;
 use simple_actors::{Actor, Context, Handler, Message};
 use test_log::test;
 
@@ -17,7 +16,6 @@ impl Message for Ping {
     type Reply = usize;
 }
 
-#[async_trait]
 impl Handler<Ping> for PingActor {
     async fn handle(&mut self, _: Ping) -> Result<usize, Self::Error> {
         self.count += 1;

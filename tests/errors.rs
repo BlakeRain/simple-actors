@@ -1,4 +1,3 @@
-use async_trait::async_trait;
 use simple_actors::{messages, Actor, Context, Handler, SendError};
 use test_log::test;
 
@@ -30,7 +29,6 @@ messages! {
     Ping => usize
 }
 
-#[async_trait]
 impl Handler<Ping> for ErrorActor {
     async fn handle(&mut self, ping: Ping) -> Result<usize, Self::Error> {
         match ping {
