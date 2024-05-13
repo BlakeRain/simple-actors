@@ -1,4 +1,4 @@
-use simple_actors::{Actor, Context, Handler, Message, Recipient, SendError};
+use simple_actors::{Actor, Context, Handle, Handler, Message, Recipient, SendError};
 use test_log::test;
 
 struct OrderShipped(usize);
@@ -26,6 +26,11 @@ struct OrderEvents {
 
 impl Actor for OrderEvents {
     type Error = String;
+    type Args = ();
+
+    async fn create(_: Context, _: Handle<Self>, _: Self::Args) -> Result<Self, Self::Error> {
+        Ok(Self::default())
+    }
 }
 
 impl OrderEvents {
@@ -57,6 +62,11 @@ impl Handler<Ship> for OrderEvents {
 struct EmailSubscriber;
 impl Actor for EmailSubscriber {
     type Error = String;
+    type Args = ();
+
+    async fn create(_: Context, _: Handle<Self>, _: Self::Args) -> Result<Self, Self::Error> {
+        Ok(Self)
+    }
 }
 
 impl Handler<OrderShipped> for EmailSubscriber {
@@ -70,6 +80,11 @@ impl Handler<OrderShipped> for EmailSubscriber {
 struct SmsSubscriber;
 impl Actor for SmsSubscriber {
     type Error = String;
+    type Args = ();
+
+    async fn create(_: Context, _: Handle<Self>, _: Self::Args) -> Result<Self, Self::Error> {
+        Ok(Self)
+    }
 }
 
 impl Handler<OrderShipped> for SmsSubscriber {

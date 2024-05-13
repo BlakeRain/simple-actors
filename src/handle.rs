@@ -67,25 +67,23 @@ impl<A> Handle<A>
 where
     A: Actor + 'static,
 {
-    pub(crate) fn run(context: Context, join_set: &mut JoinSet<()>, mut actor: A) -> Self {
-        let (sender, mut receiver) = mpsc::channel::<Envelope<A>>(actor.mailbox_size());
+    pub(crate) fn run(context: Context, join_set: &mut JoinSet<()>, args: A::Args) -> Self {
+        let (sender, mut receiver) = mpsc::channel::<Envelope<A>>(A::mailbox_size());
         let handle = Self { sender };
-        let name = actor.name();
 
         let task_handle = handle.clone();
         join_set.spawn(async move {
-            tracing::info!(actor_name = name, "Starting actor");
-            if let Err(err) = actor.started(context.clone(), task_handle).await {
-                if !actor.is_recoverable(&err) {
-                    tracing::error!(error = ?err, actor_name = name,
-                        "Received irrecoverable error starting actor");
+            tracing::info!(actor_type = std::any::type_name::<A>(), "Spawning actor");
+            let mut actor = match A::create(context.clone(), task_handle, args).await {
+                Ok(actor) => actor,
+                Err(err) => {
+                    tracing::error!(error = ?err, actor_type = std::any::type_name::<A>(),
+                        "Failed to create actor due to error");
                     return;
                 }
+            };
 
-                tracing::warn!(error = ?err, actor_name = name,
-                    "Received recoverable error starting actor");
-            }
-
+            let name = actor.name();
             let mut termination = "no more handles";
             while let Some(mut message) = receiver.recv().await {
                 match message.handle(&mut actor).await {
@@ -306,10 +304,11 @@ where
 ///
 /// impl Actor for MyActor {
 ///   type Error = MyActorError;
+///   type Args = ();
 ///
-///   async fn started(&mut self, _: Context, handle: Handle<Self>) -> Result<(), Self::Error> {
-///     self.self_handle = handle.downgrade();
-///     Ok(())
+///   async fn create(_: Context, handle: Handle<Self>, _: Self::Args) -> Result<Self, Self::Error> {
+///     let self_handle = handle.downgrade();
+///     Ok(Self { self_handle })
 ///   }
 /// }
 ///

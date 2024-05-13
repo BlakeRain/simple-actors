@@ -1,5 +1,14 @@
 # Changelog
 
+## simple-actors **0.4.0** _(2024-05-13)_
+
+### 🚨 Breaking Changes
+
+- The `Actor::started` method has been replaced by an `Actor::create` method, and the new `create`
+  method is used to create the actor from a new associated `Actor::Args` type. This allows actors to
+  be created _in their task_, rather than externally. This also allows an actor to be constructed
+  with it's `WeakHandle` and `Context`, rather than using intermediate values.
+
 ## simple-actors **0.3.0** _(2024-04-16)_
 
 ### 🚨 Breaking Changes

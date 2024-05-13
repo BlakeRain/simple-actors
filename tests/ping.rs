@@ -1,4 +1,4 @@
-use simple_actors::{Actor, Context, Handler, Message};
+use simple_actors::{Actor, Context, Handle, Handler, Message};
 use test_log::test;
 
 #[derive(Default)]
@@ -8,6 +8,11 @@ struct PingActor {
 
 impl Actor for PingActor {
     type Error = String;
+    type Args = ();
+
+    async fn create(_: Context, _: Handle<Self>, _: Self::Args) -> Result<Self, Self::Error> {
+        Ok(Self { count: 0 })
+    }
 }
 
 struct Ping;

@@ -48,17 +48,24 @@ impl Context {
     /// Spawn a new actor in this context.
     ///
     /// This will spawn a new task that executes the actor mailbox. The function returns a new
-    /// `Handle` that can be used to send messages to the new actor.
-    pub async fn spawn<A: Actor + 'static>(&self, actor: A) -> Handle<A> {
+    /// `Handle` that can be used to send messages to the new actor. The actor is created via a
+    /// call to the [`Actor::create`] method implemented for `A` using the arguments passed to this
+    /// function.
+    pub async fn spawn<A: Actor + 'static>(&self, args: A::Args) -> Handle<A> {
         let mut inner = self.inner.lock().await;
-        Handle::run(self.clone(), &mut inner.join_set, actor)
+        Handle::run(self.clone(), &mut inner.join_set, args)
     }
 
     /// Spawn a default actor.
     ///
-    /// This is the same as the `spawn` method except it uses the `Default` value for the actor.
-    pub async fn spawn_default<A: Actor + Default + 'static>(&self) -> Handle<A> {
-        self.spawn(A::default()).await
+    /// This is the same as the `spawn` method except it uses the `Default` value for the actor
+    /// arguments.
+    pub async fn spawn_default<A>(&self) -> Handle<A>
+    where
+        A: Actor + 'static,
+        A::Args: Default,
+    {
+        self.spawn(A::Args::default()).await
     }
 
     /// Count the number of remaining actors.

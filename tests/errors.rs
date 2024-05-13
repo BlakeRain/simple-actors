@@ -1,4 +1,4 @@
-use simple_actors::{messages, Actor, Context, Handler, SendError};
+use simple_actors::{messages, Actor, Context, Handle, Handler, SendError};
 use test_log::test;
 
 #[derive(Default)]
@@ -14,6 +14,11 @@ enum Error {
 
 impl Actor for ErrorActor {
     type Error = Error;
+    type Args = ();
+
+    async fn create(_: Context, _: Handle<Self>, _: Self::Args) -> Result<Self, Self::Error> {
+        Ok(Self { count: 0 })
+    }
 
     fn is_recoverable(&mut self, error: &Self::Error) -> bool {
         matches!(error, Error::Recoverable)

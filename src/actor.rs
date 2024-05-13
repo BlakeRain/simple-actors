@@ -11,12 +11,19 @@ pub trait Actor: Send + Sized + 'static {
     /// specific to messages.
     type Error: std::fmt::Debug + Send;
 
+    /// The arguments to the actor creation.
+    ///
+    /// When the actor is being created, this type should enclose the arguments that are required
+    /// to create the actor. These arguments, along with the actor [`Context`] and [`Handle`] will
+    /// be passed to the [`Actor::create`] method.
+    type Args: Send;
+
     /// Get the mailbox size for this actor (default: 8).
     ///
     /// This controls how many messages can be kept in the actors mailbox. Once the actors mailbox
     /// is full, any attempt to send a message to the actor will block until the actor processes
     /// some of the messages in the mailbox.
-    fn mailbox_size(&self) -> usize {
+    fn mailbox_size() -> usize {
         8
     }
 
@@ -27,7 +34,7 @@ pub trait Actor: Send + Sized + 'static {
         std::any::type_name::<Self>().into()
     }
 
-    /// The actor is started.
+    /// The actor is created.
     ///
     /// This method will be called on the actor before entering into the message loop. At this
     /// point, the actor can perform any asynchronous actions required when it is started, such
@@ -48,14 +55,11 @@ pub trait Actor: Send + Sized + 'static {
     /// If this method returns an error, the `is_recoverable` method is checked to see if the error
     /// is recoverable or not. If not, the actor will not be started: the message loop will not be
     /// entered into, and the `stopped()` method will be called.
-    #[allow(unused_variables)]
-    fn started(
-        &mut self,
+    fn create(
         context: Context,
         handle: Handle<Self>,
-    ) -> impl std::future::Future<Output = Result<(), Self::Error>> + std::marker::Send {
-        async { Ok(()) }
-    }
+        args: Self::Args,
+    ) -> impl std::future::Future<Output = Result<Self, Self::Error>> + std::marker::Send;
 
     /// Called when the actor has stopped.
     ///
