@@ -6,14 +6,6 @@ use tokio::sync::oneshot;
 
 use crate::{Actor, Handler, Message};
 
-pub trait ToEnvelope<A, M>
-where
-    A: Actor + Handler<M>,
-    M: Message,
-{
-    fn envelope(message: M) -> Envelope<A>;
-}
-
 #[derive(Debug, Error)]
 pub enum EnvelopeHandlerError<A>
 where
