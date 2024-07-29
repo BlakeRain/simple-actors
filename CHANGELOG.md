@@ -1,4 +1,9 @@
 # Changelog
+## simple-actors **0.4.1** _(2024-07-29)_
+
+### 🛠 Fixes
+
+- Remove the unused `ToEnvelope` trait from the `envelope` module.
 
 ## simple-actors **0.4.0** _(2024-05-13)_
 

@@ -1,6 +1,6 @@
 [package]
 name = "simple-actors"
-version = "0.4.0"
+version = "0.4.1"
 description = "Simple actor system based on Tokio"
 authors = ["Blake Rain <blake.rain@blakerain.com>"]
 edition = "2021"
