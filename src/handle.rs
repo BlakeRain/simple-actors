@@ -513,7 +513,7 @@ where
         self.sender.blocking_post(message)
     }
 
-    /// Downgrade this reciepient into a `WeakRecipient`.
+    /// Downgrade this recipient into a `WeakRecipient`.
     pub fn downgrade(&self) -> WeakRecipient<M> {
         WeakRecipient {
             upgradable: Some(self.sender.downgrade_recipient()),
