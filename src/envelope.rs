@@ -26,7 +26,7 @@ pub trait EnvelopeHandler<A: Actor> {
     ) -> Pin<Box<dyn Future<Output = Result<(), EnvelopeHandlerError<A>>> + Send + 'a>>;
 }
 
-pub struct Envelope<A: Actor + ?Sized> {
+pub struct Envelope<A: Actor> {
     type_name: &'static str,
     handler: Box<dyn EnvelopeHandler<A> + Send>,
 }

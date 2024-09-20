@@ -1,4 +1,11 @@
 # Changelog
+## simple-actors **0.4.2** _(2024-09-20)_
+
+### 🛠 Fixes
+
+- Remove the `?Sized` constraint from the `Envelope` structure's `A` generic. This constraint was
+  ignored as the `Actor` trait cannot be unsized as it has bound `Sized`.
+
 ## simple-actors **0.4.1** _(2024-07-29)_
 
 ### 🛠 Fixes
