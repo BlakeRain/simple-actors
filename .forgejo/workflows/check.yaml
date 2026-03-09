@@ -22,7 +22,7 @@ jobs:
         with:
           toolchain: stable
           components: clippy
-          cache: false
+          cache: "false"
 
       - name: Run tests
         run: cargo test
