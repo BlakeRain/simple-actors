@@ -10,10 +10,10 @@ on:
 
 jobs:
   check:
-    runs-on: ubuntu-latest
+    runs-on: docker
     steps:
       - name: Checkout the repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Install the stable rust toolchain
         uses: actions-rust-lang/setup-rust-toolchain@v1
@@ -25,19 +25,13 @@ jobs:
           cache: false
 
       - name: Run tests
-        uses: actions-rs/cargo@v1
-        with:
-          command: test
+        run: cargo test
 
       - name: Run cargo check
-        uses: actions-rs/cargo@v1
-        with:
-          command: check
+        run: cargo check
 
       - name: Run cargo clippy
-        uses: actions-rs/cargo@v1
-        with:
-          command: clippy
+        run: cargo clippy
 
       - name: Check formatting
         run: |
@@ -45,3 +39,4 @@ jobs:
 
       - name: Check typos
         uses: crate-ci/typos@master
+
