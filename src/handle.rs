@@ -454,7 +454,7 @@ where
 /// A recipient of a message
 ///
 /// This structure is a useful way to maintain a handle to an actor that can receive a certain
-/// message without also knowning the type of that actor. A `Recipient` can be obtained from a
+/// message without also knowing the type of that actor. A `Recipient` can be obtained from a
 /// `Handle` using the `Handle::recipient` method.
 pub struct Recipient<M>
 where
